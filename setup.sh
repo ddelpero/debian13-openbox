@@ -1,14 +1,12 @@
 #!/bin/bash
-# Stop on any error
 set -e
 
 # --- Configuration ---
 REAL_USER=$SUDO_USER
 USER_HOME=$(eval echo "~$REAL_USER")
 
-# EXACT Dependencies for nody-greeter and system tools
-# Using your verified list: liblightdm-gobject-1-0 and liblightdm-gobject-dev
-DEBIAN_PKGS="xserver-xorg x11-xserver-utils xinit openbox obconf lightdm geany fastfetch git wget curl unzip lxappearance nitrogen picom rofi lxterminal arc-theme papirus-icon-theme pipewire pipewire-pulse wireplumber alsa-utils network-manager network-manager-gnome polybar perl libgtk3-perl build-essential libfile-which-perl libconfig-tiny-perl nodejs npm acpi gobject-introspection liblightdm-gobject-1-0 liblightdm-gobject-dev libgirepository1.0-dev libcairo2 libcairo2-dev libxcb1-dev libx11-dev"
+# EXACT Dependencies for nody-greeter, jgmenu, and system tools
+DEBIAN_PKGS="xserver-xorg x11-xserver-utils xinit openbox obconf lightdm geany fastfetch git wget curl unzip lxappearance nitrogen picom rofi lxterminal arc-theme papirus-icon-theme pipewire pipewire-pulse wireplumber alsa-utils network-manager network-manager-gnome polybar nodejs npm acpi gobject-introspection liblightdm-gobject-1-0 liblightdm-gobject-dev libgirepository1.0-dev libcairo2 libcairo2-dev libxcb1-dev libx11-dev jgmenu"
 
 echo "--- Phase 1: Pre-Flight Validation ---"
 
@@ -41,10 +39,7 @@ if [ ! -d "nody-greeter" ]; then
     npm install
     npm run rebuild
     npm run build
-
-    # Run the installer which builds the deb and installs it
     node make install
-
     cd ..
     rm -rf nody-greeter
 fi
@@ -52,16 +47,27 @@ fi
 # Permissions for Brightness Control
 usermod -a -G video lightdm
 
-echo "--- Phase 4: Perl & obmenu-generator ---"
-# Install Linux::DesktopFiles via CPAN for Debian 13 compatibility
-perl -MCPAN -e 'my $c = CPAN::HandleConfig; $c->load; $c->set("prerequisites_policy", "follow"); $c->set("build_requires_install_policy", "yes"); CPAN::Shell->install("Linux::DesktopFiles")'
+echo "--- Phase 4: jgmenu Configuration ---"
+# Create jgmenu config directory for the user
+mkdir -p "$USER_HOME/.config/jgmenu"
+# Generate a default configuration that looks dark and minimal
+sudo -u $REAL_USER jgmenu_run init
 
-if [ ! -d "obmenu-generator" ]; then
-    git clone https://github.com/trizen/obmenu-generator.git
-    cp obmenu-generator/obmenu-generator /usr/local/bin/
-    chmod +x /usr/local/bin/obmenu-generator
-    rm -rf obmenu-generator
-fi
+# Update Openbox to use jgmenu instead of the default menu
+mkdir -p "$USER_HOME/.config/openbox"
+cat <<EOF > "$USER_HOME/.config/openbox/rc.xml"
+<openbox_config>
+  <mouse>
+    <context name="Root">
+      <mousebind button="Right" action="Press">
+        <action name="Execute">
+          <command>jgmenu_run</command>
+        </action>
+      </mousebind>
+    </context>
+  </mouse>
+</openbox_config>
+EOF
 
 echo "--- Phase 5: Themes & Configs ---"
 # Setup Aether for nody-greeter
@@ -72,7 +78,7 @@ cp -r /tmp/Aether/* /usr/share/nody-greeter/themes/Aether/
 # Configure LightDM for Nody
 sed -i 's/^#greeter-session=.*/greeter-session=nody-greeter/' /etc/lightdm/lightdm.conf
 
-# Deployment of Polybar files from your local directory
+# Deploy local Polybar files
 if [ -d "./config/polybar" ]; then
     mkdir -p "$USER_HOME/.config/polybar"
     cp ./config/polybar/config.ini "$USER_HOME/.config/polybar/"
@@ -85,11 +91,12 @@ mkdir -p "$USER_HOME/.config/gtk-3.0"
 echo -e "[Settings]\ngtk-theme-name=Arc-Dark\ngtk-icon-theme-name=Papirus-Dark" > "$USER_HOME/.config/gtk-3.0/settings.ini"
 
 # Openbox Autostart
-mkdir -p "$USER_HOME/.config/openbox"
 cat <<EOF > "$USER_HOME/.config/openbox/autostart"
 picom &
 nitrogen --restore &
 nm-applet &
+# Pre-load jgmenu for faster response
+jgmenu_run --pretend &
 "$USER_HOME/.config/polybar/polybar-ob" &
 EOF
 
