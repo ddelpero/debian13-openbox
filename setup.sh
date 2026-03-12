@@ -7,7 +7,7 @@ USER_HOME=$(eval echo "~$REAL_USER")
 
 # Verified Debian 13 Packages
 # Added the web-greeter build dependencies you found
-DEBIAN_PKGS="xserver-xorg x11-xserver-utils xinit openbox obconf lightdm geany fastfetch git wget curl unzip lxappearance nitrogen picom rofi lxterminal arc-theme papirus-icon-theme pipewire pipewire-pulse wireplumber alsa-utils network-manager network-manager-gnome polybar perl libgtk3-perl build-essential libfile-which-perl libconfig-tiny-perl liblightdm-gobject-1-dev python3-gi python3-pyqt5 python3-pyqt5.qtwebengine python3-ruamel.yaml python3-pyinotify libqt5webengine5 gobject-introspection libxcb1-dev libx11-dev rsync make node-typescript"
+DEBIAN_PKGS="xserver-xorg x11-xserver-utils xinit openbox obconf lightdm geany fastfetch git wget curl unzip lxappearance nitrogen picom rofi lxterminal arc-theme papirus-icon-theme pipewire pipewire-pulse wireplumber alsa-utils network-manager network-manager-gnome polybar perl libgtk3-perl build-essential libfile-which-perl libconfig-tiny-perl liblightdm-gobject-dev python3-gi python3-pyqt5 python3-pyqt5.qtwebengine python3-ruamel.yaml python3-pyinotify libqt5webengine5 gobject-introspection libxcb1-dev libx11-dev rsync make node-typescript"
 
 echo "--- Phase 1: Pre-Flight Validation ---"
 
