@@ -15,8 +15,8 @@ if [ ! -f "/etc/apt/sources.list.d/wezterm.list" ]; then
     echo 'deb [signed-by=/usr/share/keyrings/packages.wezterm.gpg] https://apt.fury.io/wez/ * *' | tee /etc/apt/sources.list.d/wezterm.list
 fi
 
-# Essential Packages
-DEBIAN_PKGS="xserver-xorg x11-xserver-utils xinit openbox obconf lightdm lightdm-gtk-greeter geany fastfetch unzip lxappearance nitrogen picom rofi lxterminal arc-theme papirus-icon-theme pipewire pipewire-pulse wireplumber alsa-utils network-manager network-manager-gnome polybar jgmenu gsimplecal xfce4-appfinder xdotool"
+# Essential Packages (Added nautilus, gnome-sushi, xinput)
+DEBIAN_PKGS="xserver-xorg x11-xserver-utils xinit openbox obconf lightdm lightdm-gtk-greeter geany fastfetch unzip lxappearance nitrogen picom rofi lxterminal arc-theme papirus-icon-theme pipewire pipewire-pulse wireplumber alsa-utils network-manager network-manager-gnome polybar jgmenu gsimplecal xfce4-appfinder xdotool xinput nautilus gnome-sushi"
 
 echo "--- Phase 2: Core Installation ---"
 apt update
@@ -27,47 +27,57 @@ MIN_FILE="min-1.35.4-amd64.deb"
 [ ! -f "$MIN_FILE" ] && wget -O "$MIN_FILE" "https://github.com/minbrowser/min/releases/download/v1.35.4/$MIN_FILE"
 apt install -y "./$MIN_FILE"
 
-echo "--- Phase 3: Edge-Snapping Daemon ---"
+echo "--- Phase 3: Edge-Snapping Daemon (Refined) ---"
 cat <<'EOF' > /usr/local/bin/edge-snapper
 #!/bin/bash
-# Edge Snapping for Openbox
 T=2
+MARGIN=28
 while true; do
-    eval $(xdotool getmouselocation --shell)
-    WIDTH=$(xwininfo -root | grep 'Width' | awk '{print $2}')
-
-    # Use windowstate to remove maximization before resizing
-    if [ "$X" -le "$T" ]; then
-        ID=$(xdotool getactivewindow)
-        xdotool windowstate --remove MAXIMIZED_VERT,MAXIMIZED_HORZ $ID
-        xdotool windowsize $ID 50% 100% windowmove $ID 0 0
-        sleep 0.5
-    elif [ "$X" -ge "$((WIDTH - T))" ]; then
-        ID=$(xdotool getactivewindow)
-        xdotool windowstate --remove MAXIMIZED_VERT,MAXIMIZED_HORZ $ID
-        xdotool windowsize $ID 50% 100% windowmove $ID 50% 0
-        sleep 0.5
-    elif [ "$Y" -le "$T" ]; then
-        ID=$(xdotool getactivewindow)
-        xdotool windowmaximize $ID
-        sleep 0.5
+    # Only snap when mouse button is UP (release)
+    STATE=$(xinput --query-state "$(xinput list --name-only | grep -i 'mouse' | head -n1)" | grep "button\[1\]" | awk -F= '{print $2}')
+    if [ "$STATE" == "up" ]; then
+        eval $(xdotool getmouselocation --shell)
+        WIDTH=$(xwininfo -root | grep 'Width' | awk '{print $2}')
+        HEIGHT=$(xwininfo -root | grep 'Height' | awk '{print $2}')
+        SNAP_HEIGHT=$((HEIGHT - MARGIN))
+        if [ "$X" -le "$T" ]; then
+            ID=$(xdotool getactivewindow)
+            xdotool windowstate --remove MAXIMIZED_VERT,MAXIMIZED_HORZ $ID
+            xdotool windowsize $ID 50% $SNAP_HEIGHT windowmove $ID 0 $MARGIN
+            sleep 0.5
+        elif [ "$X" -ge "$((WIDTH - T))" ]; then
+            ID=$(xdotool getactivewindow)
+            xdotool windowstate --remove MAXIMIZED_VERT,MAXIMIZED_HORZ $ID
+            xdotool windowsize $ID 50% $SNAP_HEIGHT windowmove $ID 50% $MARGIN
+            sleep 0.5
+        elif [ "$Y" -le "$T" ]; then
+            ID=$(xdotool getactivewindow)
+            xdotool windowmaximize $ID
+            sleep 0.5
+        fi
     fi
     sleep 0.1
 done
 EOF
 chmod +x /usr/local/bin/edge-snapper
 
-echo "--- Phase 4: Config Deployment ---"
-# Create the CORRECT nested structure
+echo "--- Phase 4: User Config Deployment ---"
+# Correct nested structure for Polybar and Rofi
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/openbox/polybar"
+sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/rofi"
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/jgmenu"
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/gtk-3.0"
 
-# Polybar: Deploying YOUR files to .config/openbox/polybar/
+# Polybar: YOUR files
 if [ -d "./config/polybar" ]; then
-    echo "Deploying your Polybar configuration to Openbox directory..."
     cp -r ./config/polybar/. "$USER_HOME/.config/openbox/polybar/"
     [ -f "$USER_HOME/.config/openbox/polybar/polybar-ob" ] && chmod +x "$USER_HOME/.config/openbox/polybar/polybar-ob"
+fi
+
+# Rofi: YOUR 3 files
+if [ -d "./config/rofi" ]; then
+    echo "Deploying Rofi configurations..."
+    cp -r ./config/rofi/. "$USER_HOME/.config/rofi/"
 fi
 
 # Openbox rc.xml: Using YOUR exact tiling bindings
@@ -106,7 +116,6 @@ fi
 sed -i 's/<top>0<\/top>/<top>28<\/top>/' "$RC_XML"
 
 echo "--- Phase 5: Final Autostart & Systemd ---"
-# Updated to point to the correct Polybar launch path
 cat <<EOF > "$USER_HOME/.config/openbox/autostart"
 picom &
 nitrogen --restore &
