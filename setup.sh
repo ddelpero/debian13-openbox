@@ -8,6 +8,7 @@ USER_HOME=$(eval echo "~$REAL_USER")
 # Phase 0: Bootstrap Fetch Tools
 echo "--- Phase 0: Bootstrapping ---"
 apt update
+apt upgrade -y
 apt install -y curl gpg wget git build-essential
 
 # Phase 1: WezTerm Repository
