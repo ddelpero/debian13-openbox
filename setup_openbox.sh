@@ -5,6 +5,12 @@ set -e
 REAL_USER=$SUDO_USER
 USER_HOME=$(eval echo "~$REAL_USER")
 
+# Phase 1: WezTerm Repository
+if [ ! -f "/etc/apt/sources.list.d/wezterm.list" ]; then
+    curl -fsSL https://apt.fury.io/wez/gpg.key | gpg --yes --dearmor -o /usr/share/keyrings/packages.wezterm.gpg
+    echo 'deb [signed-by=/usr/share/keyrings/packages.wezterm.gpg] https://apt.fury.io/wez/ * *' | tee /etc/apt/sources.list.d/wezterm.list
+fi
+
 echo "--- Phase 1: Package Sync (The Essentials) ---"
 apt update
 # Replaced gsd-xsettings with xsettingsd (lighter/more reliable for Openbox)
@@ -15,9 +21,6 @@ apt install -y $DEBIAN_PKGS wezterm
 MIN_FILE="min-1.35.4-amd64.deb"
 [ ! -f "$MIN_FILE" ] && wget -O "$MIN_FILE" "https://github.com/minbrowser/min/releases/download/v1.35.4/$MIN_FILE"
 apt install -y "./$MIN_FILE"
-
-# Fix Terminal Alternative (Force wezterm)
-update-alternatives --set x-terminal-emulator /usr/bin/wezterm
 
 echo "--- Phase 2: Deploying Configs ---"
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/openbox/polybar"
