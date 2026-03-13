@@ -30,19 +30,48 @@ MIN_FILE="min-1.35.4-amd64.deb"
 [ ! -f "$MIN_FILE" ] && wget -O "$MIN_FILE" "https://github.com/minbrowser/min/releases/download/v1.35.4/$MIN_FILE"
 apt install -y "./$MIN_FILE"
 
-echo "--- Phase 3: Building Opensnap (Edge Snapping) ---"
-if [ ! -f "/usr/local/bin/opensnap" ]; then
-    sudo apt-get install build-essential libx11-dev libgtk-3-dev wmctrl
-    [ -d "opensnap" ] && rm -rf opensnap
-    git clone https://github.com/lawl/opensnap.git
-    cd opensnap
-    make
-    sudo make install
-    cp opensnap /usr/local/bin/
-    chmod +x /usr/local/bin/opensnap
-    cd ..
-    rm -rf opensnap
-fi
+echo "--- Phase 3: Setting up Edge Snapping (Python-Xlib) ---"
+# Install runtime dependencies instead of build-essential
+apt install -y python3-xlib xdotool
+
+# Create the snapping daemon script
+cat <<EOF > /usr/local/bin/snap-daemon.py
+#!/usr/bin/env python3
+import time
+from Xlib import display
+from subprocess import run
+
+def get_mouse_pos():
+    data = display.Display().screen().root.query_pointer()._data
+    return data['root_x'], data['root_y']
+
+def snap(action):
+    if action == "left":
+        run(["xdotool", "getactivewindow", "windowunmaximize", "windowsize", "50%", "100%", "windowmove", "0", "0"])
+    elif action == "right":
+        run(["xdotool", "getactivewindow", "windowunmaximize", "windowsize", "50%", "100%", "windowmove", "50%", "0"])
+    elif action == "top":
+        run(["xdotool", "getactivewindow", "windowmaximize"])
+
+# Simple edge detection loop
+last_pos = (0,0)
+while True:
+    x, y = get_mouse_pos()
+    # Only trigger if the mouse hits the absolute edge (0 or screen width)
+    # You may need to adjust 1919 to your actual screen width - 1
+    if x == 0:
+        snap("left")
+        time.sleep(1) # Prevent bounce
+    elif x >= 1919: # Replace with your width - 1 or use xlib to detect
+        snap("right")
+        time.sleep(1)
+    elif y == 0:
+        snap("top")
+        time.sleep(1)
+    time.sleep(0.1)
+EOF
+
+chmod +x /usr/local/bin/snap-daemon.py
 
 echo "--- Phase 4: User Environment & Permissions ---"
 # Create directories AS USER
