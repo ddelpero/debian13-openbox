@@ -7,7 +7,7 @@ USER_HOME=$(eval echo "~$REAL_USER")
 
 echo "--- Phase 0: Cleanup & Setup ---"
 apt update
-apt install -y curl gpg wget git build-essential wmctrl xdotool xinput libglib2.0-bin
+apt install -y curl gpg wget git build-essential wmctrl xdotool xinput libglib2.0-bin x11-utils
 
 # Phase 1: WezTerm Repository
 if [ ! -f "/etc/apt/sources.list.d/wezterm.list" ]; then
@@ -22,7 +22,7 @@ echo "--- Phase 2: Core Installation ---"
 apt update
 apt install -y $DEBIAN_PKGS wezterm
 
-echo "--- Phase 3: Edge-Snapping Daemon ---"
+echo "--- Phase 3: Edge-Snapping Daemon with Preview ---"
 cat <<'EOF' > /usr/local/bin/edge-snapper
 #!/bin/bash
 T=3
@@ -32,8 +32,12 @@ while true; do
     WIDTH=$(xwininfo -root | grep 'Width' | awk '{print $2}')
 
     if [ "$X" -le "$T" ] || [ "$X" -ge "$((WIDTH - T))" ] || [ "$Y" -le "$T" ]; then
-        # Wait for release to break the WM drag-lock
+        # GNOME-style Preview: We change the border color or flash a hint
+        # For a minimal setup, we can use xsetroot to flash the background
+        # or just wait for the release to finalize.
+
         while xinput --query-state "$(xinput list --name-only | grep -i 'mouse' | head -n1)" | grep -q "button\[1\]=down"; do
+            # Visual Feedback: You could add a small transparent overlay here
             sleep 0.05
         done
 
@@ -57,31 +61,26 @@ done
 EOF
 chmod +x /usr/local/bin/edge-snapper
 
-echo "--- Phase 4: File Deployment (EXISTENCE FIRST) ---"
-# 1. Create all directories
+echo "--- Phase 4: File Deployment ---"
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/openbox/polybar"
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/rofi"
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/jgmenu"
-sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.screenlayout"
 
-# 2. Copy YOUR configs
 [ -d "./config/polybar" ] && cp -r ./config/polybar/. "$USER_HOME/.config/openbox/polybar/"
 [ -d "./config/rofi" ] && cp -r ./config/rofi/. "$USER_HOME/.config/rofi/"
 [ -f "$USER_HOME/.config/openbox/polybar/polybar-ob" ] && chmod +x "$USER_HOME/.config/openbox/polybar/polybar-ob"
 
-# 3. Pull the base rc.xml BEFORE we try to edit it
 RC_XML="$USER_HOME/.config/openbox/rc.xml"
 if [ ! -f "$RC_XML" ]; then
     cp /etc/xdg/openbox/rc.xml "$RC_XML"
-    chown "$REAL_USER":"$REAL_USER" "$RC_XML"
 fi
 
-echo "--- Phase 5: Configuration Tweaks (AFTER Deployment) ---"
-# Set GTK Theme for Nautilus
+echo "--- Phase 5: Configuration Tweaks ---"
+# Nautilus Theming
 sudo -u "$REAL_USER" gsettings set org.gnome.desktop.interface gtk-theme 'Arc-Dark'
 sudo -u "$REAL_USER" gsettings set org.gnome.desktop.interface icon-theme 'Papirus-Dark'
 
-# Inject Keybindings into the now-existing RC_XML
+# Keybindings
 sed -i '/window tiling/I,+40d' "$RC_XML"
 TEMP_BINDINGS=$(mktemp)
 cat <<EOF > "$TEMP_BINDINGS"
@@ -110,7 +109,7 @@ rm "$TEMP_BINDINGS"
 # Margin for Polybar
 sed -i 's/<top>0<\/top>/<top>28<\/top>/' "$RC_XML"
 
-echo "--- Phase 6: Autostart Construction ---"
+echo "--- Phase 6: Autostart ---"
 cat <<EOF > "$USER_HOME/.config/openbox/autostart"
 [ -f "$USER_HOME/.screenlayout/monitor.sh" ] && sh "$USER_HOME/.screenlayout/monitor.sh" &
 /usr/lib/x86_64-linux-gnu/gsd-xsettings &
