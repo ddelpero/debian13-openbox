@@ -7,17 +7,16 @@ USER_HOME=$(eval echo "~$REAL_USER")
 
 echo "--- Phase 0: Bootstrapping ---"
 apt update
-apt install -y curl gpg wget git build-essential
+apt install -y curl gpg wget git build-essential x11-xserver-utils xdotool
 
 # Phase 1: WezTerm Repository
 if [ ! -f "/etc/apt/sources.list.d/wezterm.list" ]; then
-    curl -fsSL https://apt.fury.io/wez/gpg.key | gpg --yes --dearmor -o /usr/share/keyrings/wezterm-fury.gpg
-    echo 'deb [signed-by=/usr/share/keyrings/wezterm-fury.gpg] https://apt.fury.io/wez/ * *' | tee /etc/apt/sources.list.d/wezterm.list
-    chmod 644 /usr/share/keyrings/wezterm-fury.gpg
+    curl -fsSL https://apt.fury.io/wez/gpg.key | gpg --yes --dearmor -o /usr/share/keyrings/packages.wezterm.gpg
+    echo 'deb [signed-by=/usr/share/keyrings/packages.wezterm.gpg] https://apt.fury.io/wez/ * *' | tee /etc/apt/sources.list.d/wezterm.list
 fi
 
 # Essential Packages
-DEBIAN_PKGS="xserver-xorg x11-xserver-utils xinit openbox obconf lightdm lightdm-gtk-greeter geany fastfetch unzip lxappearance nitrogen picom rofi lxterminal arc-theme papirus-icon-theme pipewire pipewire-pulse wireplumber alsa-utils network-manager network-manager-gnome polybar jgmenu gsimplecal xfce4-appfinder xdotool"
+DEBIAN_PKGS="xserver-xorg xinit openbox obconf lightdm lightdm-gtk-greeter geany fastfetch unzip lxappearance nitrogen picom rofi lxterminal arc-theme papirus-icon-theme pipewire pipewire-pulse wireplumber alsa-utils network-manager network-manager-gnome polybar jgmenu gsimplecal xfce4-appfinder"
 
 echo "--- Phase 2: Core Installation ---"
 apt update
@@ -28,45 +27,21 @@ MIN_FILE="min-1.35.4-amd64.deb"
 [ ! -f "$MIN_FILE" ] && wget -O "$MIN_FILE" "https://github.com/minbrowser/min/releases/download/v1.35.4/$MIN_FILE"
 apt install -y "./$MIN_FILE"
 
-echo "--- Phase 3: User Config Deployment ---"
-sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/openbox" "$USER_HOME/.config/jgmenu" "$USER_HOME/.config/polybar" "$USER_HOME/.config/gtk-3.0"
-
-# jgmenu Init
-[ ! -f "$USER_HOME/.config/jgmenu/jgmenurc" ] && sudo -u "$REAL_USER" jgmenu_run init
-
-# Polybar: Direct copy of YOUR files
-if [ -d "./config/polybar" ]; then
-    echo "Deploying your Polybar configuration..."
-    cp -r ./config/polybar/. "$USER_HOME/.config/polybar/"
-    [ -f "$USER_HOME/.config/polybar/polybar-ob" ] && chmod +x "$USER_HOME/.config/polybar/polybar-ob"
-fi
-
-echo "--- Phase 3.5: Installing Edge-Snapping (Bash-Xdotool-Daemon) ---"
-apt install -y xdotool
-
-# Create a robust bash daemon for snapping
+echo "--- Phase 3: Edge-Snapping Daemon (Bash Version) ---"
+# Creating the daemon first so it exists for the autostart
 cat <<'EOF' > /usr/local/bin/edge-snapper
 #!/bin/bash
-# Edge Snapping Daemon for Openbox
-# Matches user's 50/100 tiling preference
-
-# Threshold for the edge (in pixels)
+# Edge Snapping for Openbox (50/100 split)
 T=2
-
 while true; do
-    # Get mouse coordinates and screen width
     eval $(xdotool getmouselocation --shell)
     WIDTH=$(xwininfo -root | grep 'Width' | awk '{print $2}')
-
-    # Snap Left
     if [ "$X" -le "$T" ]; then
         xdotool getactivewindow windowunmaximize windowsize 50% 100% windowmove 0 0
-        sleep 0.5 # Cooldown
-    # Snap Right
+        sleep 0.5
     elif [ "$X" -ge "$((WIDTH - T))" ]; then
         xdotool getactivewindow windowunmaximize windowsize 50% 100% windowmove 50% 0
         sleep 0.5
-    # Snap Top (Maximize)
     elif [ "$Y" -le "$T" ]; then
         xdotool getactivewindow windowmaximize
         sleep 0.5
@@ -74,25 +49,22 @@ while true; do
     sleep 0.1
 done
 EOF
-
 chmod +x /usr/local/bin/edge-snapper
 
-# Add to Openbox Autostart
-if ! grep -q "edge-snapper" "$USER_HOME/.config/openbox/autostart"; then
-    sed -i '/polybar-ob/i edge-snapper &' "$USER_HOME/.config/openbox/autostart"
+echo "--- Phase 4: Config Deployment ---"
+# Create directories BEFORE writing to them
+sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/openbox" "$USER_HOME/.config/jgmenu" "$USER_HOME/.config/polybar" "$USER_HOME/.config/gtk-3.0"
+
+# Polybar: Direct copy of YOUR files
+if [ -d "./config/polybar" ]; then
+    cp -r ./config/polybar/. "$USER_HOME/.config/polybar/"
+    [ -f "$USER_HOME/.config/polybar/polybar-ob" ] && chmod +x "$USER_HOME/.config/polybar/polybar-ob"
 fi
 
-# Add to Openbox Autostart
-if ! grep -q "bunsen-snapper" "$USER_HOME/.config/openbox/autostart"; then
-    # Insert it before the polybar launch
-    sed -i '/polybar-ob/i bunsen-snapper &' "$USER_HOME/.config/openbox/autostart"
-fi
-
-# --- Phase 4: Openbox Keybindings (rc.xml) ---
+# Openbox rc.xml: Using YOUR exact tiling bindings
 RC_XML="$USER_HOME/.config/openbox/rc.xml"
 [ ! -f "$RC_XML" ] && cp /etc/xdg/openbox/rc.xml "$RC_XML"
 
-# Inject YOUR exact tiling bindings
 if ! grep -q "window tiling" "$RC_XML"; then
     TEMP_BINDINGS=$(mktemp)
     cat <<EOF > "$TEMP_BINDINGS"
@@ -121,22 +93,25 @@ EOF
     rm "$TEMP_BINDINGS"
 fi
 
-# Standard Openbox Margin fix for Polybar
+# Set Polybar Margin
 sed -i 's/<top>0<\/top>/<top>28<\/top>/' "$RC_XML"
 
-echo "--- Phase 5: Systemd & Autostart ---"
-systemctl enable lightdm
-systemctl set-default graphical.target
-
-# Openbox Autostart
+echo "--- Phase 5: Final Autostart & Systemd ---"
+# NOW we create the autostart file with the snapper included
 cat <<EOF > "$USER_HOME/.config/openbox/autostart"
 picom &
 nitrogen --restore &
 nm-applet &
 jgmenu_run --pretend &
+edge-snapper &
 "$USER_HOME/.config/polybar/polybar-ob" &
 EOF
 
+# System boot targets
+systemctl enable lightdm
+systemctl set-default graphical.target
+
+# Permissions Cleanup
 chown -R "$REAL_USER":"$REAL_USER" "$USER_HOME/.config"
 
 echo "--- SUCCESS ---"
