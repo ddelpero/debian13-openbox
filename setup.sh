@@ -41,32 +41,46 @@ if [ -d "./config/polybar" ]; then
     [ -f "$USER_HOME/.config/polybar/polybar-ob" ] && chmod +x "$USER_HOME/.config/polybar/polybar-ob"
 fi
 
-echo "--- Phase 3.5: Building Bunsen-Snapper (Edge-Drag Snapping) ---"
-# Install specific dev headers for Bunsen-Snapper
-apt install -y libx11-dev libxinerama-dev libxrandr-dev
+echo "--- Phase 3.5: Installing Edge-Snapping (Bash-Xdotool-Daemon) ---"
+apt install -y xdotool
 
-if [ ! -f "/usr/local/bin/bunsen-snapper" ]; then
-    [ -d "bunsen-snapper" ] && rm -rf bunsen-snapper
-    git clone https://github.com/wellcorps/bunsen-snapper.git
-    cd bunsen-snapper
-    # Simple make and install
-    make
-    cp bunsen-snapper /usr/local/bin/
-    chmod +x /usr/local/bin/bunsen-snapper
-    cd ..
-    rm -rf bunsen-snapper
-fi
+# Create a robust bash daemon for snapping
+cat <<'EOF' > /usr/local/bin/edge-snapper
+#!/bin/bash
+# Edge Snapping Daemon for Openbox
+# Matches user's 50/100 tiling preference
 
-# Create the configuration for snapper to match your tile preferences
-# This ensures dragging to edges behaves like your Super+Arrow keys
-sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/bunsen-snapper"
-cat <<EOF > "$USER_HOME/.config/bunsen-snapper/bunsen-snapper.conf"
-# Snapping zones (left, right, top)
-# Format: <edge> <width_pct> <height_pct>
-left 50 100
-right 50 100
-top 100 100
+# Threshold for the edge (in pixels)
+T=2
+
+while true; do
+    # Get mouse coordinates and screen width
+    eval $(xdotool getmouselocation --shell)
+    WIDTH=$(xwininfo -root | grep 'Width' | awk '{print $2}')
+
+    # Snap Left
+    if [ "$X" -le "$T" ]; then
+        xdotool getactivewindow windowunmaximize windowsize 50% 100% windowmove 0 0
+        sleep 0.5 # Cooldown
+    # Snap Right
+    elif [ "$X" -ge "$((WIDTH - T))" ]; then
+        xdotool getactivewindow windowunmaximize windowsize 50% 100% windowmove 50% 0
+        sleep 0.5
+    # Snap Top (Maximize)
+    elif [ "$Y" -le "$T" ]; then
+        xdotool getactivewindow windowmaximize
+        sleep 0.5
+    fi
+    sleep 0.1
+done
 EOF
+
+chmod +x /usr/local/bin/edge-snapper
+
+# Add to Openbox Autostart
+if ! grep -q "edge-snapper" "$USER_HOME/.config/openbox/autostart"; then
+    sed -i '/polybar-ob/i edge-snapper &' "$USER_HOME/.config/openbox/autostart"
+fi
 
 # Add to Openbox Autostart
 if ! grep -q "bunsen-snapper" "$USER_HOME/.config/openbox/autostart"; then
