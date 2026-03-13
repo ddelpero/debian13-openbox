@@ -32,10 +32,12 @@ apt install -y "./$MIN_FILE"
 
 echo "--- Phase 3: Building Opensnap (Edge Snapping) ---"
 if [ ! -f "/usr/local/bin/opensnap" ]; then
+    sudo apt-get install build-essential libx11-dev libgtk-3-dev wmctrl
     [ -d "opensnap" ] && rm -rf opensnap
     git clone https://github.com/lawl/opensnap.git
     cd opensnap
     make
+    sudo make install
     cp opensnap /usr/local/bin/
     chmod +x /usr/local/bin/opensnap
     cd ..
