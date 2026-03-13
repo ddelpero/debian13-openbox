@@ -7,7 +7,7 @@ USER_HOME=$(eval echo "~$REAL_USER")
 
 echo "--- Phase 0: System Sync ---"
 apt update
-apt install -y curl gpg wget git build-essential wmctrl xdotool xinput libglib2.0-bin x11-utils dbus-x11 xsettingsd
+apt install -y curl gpg wget git build-essential wmctrl xdotool xinput libglib2.0-bin x11-utils dbus-x11
 
 # Phase 1: WezTerm Repository
 if [ ! -f "/etc/apt/sources.list.d/wezterm.list" ]; then
@@ -27,41 +27,46 @@ MIN_FILE="min-1.35.4-amd64.deb"
 [ ! -f "$MIN_FILE" ] && wget -O "$MIN_FILE" "https://github.com/minbrowser/min/releases/download/v1.35.4/$MIN_FILE"
 apt install -y "./$MIN_FILE"
 
-# Force WezTerm as system default
-update-alternatives --set x-terminal-emulator /usr/bin/wezterm
-
 echo "--- Phase 3: Config Deployment ---"
+# Strictly using .config/openbox/polybar/ as requested
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/openbox/polybar"
 sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/rofi"
-sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/gtk-4.0"
+sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/jgmenu"
+sudo -u "$REAL_USER" mkdir -p "$USER_HOME/.config/gtk-3.0"
 
+# Deploy YOUR configs
 [ -d "./config/polybar" ] && cp -r ./config/polybar/. "$USER_HOME/.config/openbox/polybar/"
 [ -d "./config/rofi" ] && cp -r ./config/rofi/. "$USER_HOME/.config/rofi/"
 [ -f "$USER_HOME/.config/openbox/polybar/polybar-ob" ] && chmod +x "$USER_HOME/.config/openbox/polybar/polybar-ob"
 
-# Deploy rc.xml
+# Deploy rc.xml before we try to sed it
 RC_XML="$USER_HOME/.config/openbox/rc.xml"
 if [ ! -f "$RC_XML" ]; then
     sudo -u "$REAL_USER" cp /etc/xdg/openbox/rc.xml "$RC_XML"
 fi
 
-echo "--- Phase 4: Fixing Nautilus/GTK4 Theming ---"
-# This is the "Hard" link for GTK4 apps like Nautilus
-if [ -d "/usr/share/themes/Arc-Dark/gtk-4.0" ]; then
-    sudo -u "$REAL_USER" cp -r /usr/share/themes/Arc-Dark/gtk-4.0/* "$USER_HOME/.config/gtk-4.0/"
-fi
+echo "--- Phase 4: GTK Theming (The Manual Way) ---"
+# GTK2
+cat <<EOF > "$USER_HOME/.gtkrc-2.0"
+gtk-theme-name="Arc-Dark"
+gtk-icon-theme-name="Papirus-Dark"
+EOF
 
-# Set GTK3 settings for good measure
-sudo -u "$REAL_USER" gsettings set org.gnome.desktop.interface gtk-theme 'Arc-Dark'
-sudo -u "$REAL_USER" gsettings set org.gnome.desktop.interface icon-theme 'Papirus-Dark'
-sudo -u "$REAL_USER" gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+# GTK3
+cat <<EOF > "$USER_HOME/.config/gtk-3.0/settings.ini"
+[Settings]
+gtk-theme-name=Arc-Dark
+gtk-icon-theme-name=Papirus-Dark
+gtk-application-prefer-dark-theme=1
+EOF
 
 echo "--- Phase 5: Openbox Hardening ---"
+# Single Desktop, No Edge Warping
 sed -i 's/<number>.*<\/number>/<number>1<\/number>/' "$RC_XML"
 sed -i 's/<screenEdgeWarpTime>.*<\/screenEdgeWarpTime>/<screenEdgeWarpTime>0<\/screenEdgeWarpTime>/' "$RC_XML"
 sed -i 's/<top>0<\/top>/<top>28<\/top>/' "$RC_XML"
 
-# Inject Smooth Tiling Bindings
+# Inject Smooth Tiling Bindings (Your exact cbpp style)
 sed -i '/window tiling/I,+45d' "$RC_XML"
 TEMP_BINDINGS=$(mktemp)
 cat <<EOF > "$TEMP_BINDINGS"
@@ -89,16 +94,18 @@ rm "$TEMP_BINDINGS"
 
 echo "--- Phase 6: Autostart ---"
 cat <<EOF > "$USER_HOME/.config/openbox/autostart"
-# Force GTK4 apps to see the theme
+# Monitor Setup
+[ -f "$USER_HOME/.screenlayout/monitor.sh" ] && sh "$USER_HOME/.screenlayout/monitor.sh" &
+
+# Theming Environment Variable (Best for Nautilus GTK4)
 export GTK_THEME=Arc-Dark
 
-[ -f "$USER_HOME/.screenlayout/monitor.sh" ] && sh "$USER_HOME/.screenlayout/monitor.sh" &
-xsettingsd &
+# Background Services
 picom --backend glx --vsync &
 nitrogen --restore &
 nm-applet &
 bash "$USER_HOME/.config/openbox/polybar/polybar-ob" &
 EOF
 
-chown -R "$REAL_USER":"$REAL_USER" "$USER_HOME/.config"
+chown -R "$REAL_USER":"$REAL_USER" "$USER_HOME/.config" "$USER_HOME/.gtkrc-2.0"
 echo "--- SUCCESS ---"
