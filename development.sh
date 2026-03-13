@@ -47,7 +47,6 @@ if [ ! -f "$ST3_FILE" ]; then
     wget -O "$ST3_FILE" "https://download.sublimetext.com/$ST3_FILE"
 fi
 apt install -y "./$ST3_FILE"
-# Hold the package to prevent apt from upgrading to ST4
 apt-mark hold sublime-text
 
 # 2. Dropbox (Your Verified 2026.01.15 Link)
@@ -96,7 +95,12 @@ Terminal=false
 StartupWMClass=jetbrains-studio
 EOF
 
+echo "--- Phase 4: Service Management ---"
+systemctl enable docker
+systemctl enable libvirtd
+systemctl start docker
+systemctl start libvirtd
+
 chown -R "$REAL_USER":"$REAL_USER" "$USER_HOME"
 
 echo "--- SUCCESS: Dev environment deployed ---"
-echo "Sublime Text 3 (pinned), Android Studio Panda 2, and Dropbox 2026 are ready."

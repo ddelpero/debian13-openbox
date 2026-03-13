@@ -77,8 +77,9 @@ fi
 RC_XML="$USER_HOME/.config/openbox/rc.xml"
 [ ! -f "$RC_XML" ] && cp /etc/xdg/openbox/rc.xml "$RC_XML"
 
-# Inject Window Snapping Shortcuts
-if ! grep -q "Window Snapping" "$RC_XML"; then
+# Inject Window Snapping & Movement Shortcuts
+# We use 'W' (Super/Windows key) for all of these
+if ! grep -q "Window Movement" "$RC_XML"; then
     TEMP_BINDINGS=$(mktemp)
     cat <<EOF > "$TEMP_BINDINGS"
     <keybind key="W-Left">
@@ -89,3 +90,14 @@ if ! grep -q "Window Snapping" "$RC_XML"; then
       <action name="UnmaximizeFull"/><action name="MaximizeVert"/>
       <action name="MoveResizeTo"><x>-0</x><y>0</y><width>50%</width></action>
     </keybind>
+    <keybind key="W-Up"><action name="Maximize"/></keybind>
+    <keybind key="W-Down"><action name="Unmaximize"/></keybind>
+
+    <keybind key="W-S-Left"><action name="MoveRelative"><x>-20</x><y>0</y></action></keybind>
+    <keybind key="W-S-Right"><action name="MoveRelative"><x>20</x><y>0</y></action></keybind>
+    <keybind key="W-S-Up"><action name="MoveRelative"><x>0</x><y>-20</y></action></keybind>
+    <keybind key="W-S-Down"><action name="MoveRelative"><x>0</x><y>20</y></action></keybind>
+EOF
+    sed -i "/<\/keyboard>/e cat $TEMP_BINDINGS" "$RC_XML"
+    rm "$TEMP_BINDINGS"
+fi
