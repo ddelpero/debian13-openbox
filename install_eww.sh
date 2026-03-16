@@ -11,7 +11,7 @@ echo "--- Phase 1: Installing System Dependencies ---"
 sudo apt update
 sudo apt install -y \
     libgtk-3-dev \
-    libgdk-pixbuf2.0-dev \
+    libgdk-pixbuf-2.0-dev \
     libglib2.0-dev \
     libcairo2-dev \
     libpango1.0-dev \
